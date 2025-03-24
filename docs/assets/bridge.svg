@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="479px" height="479px" viewBox="0 0 479 479" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>编组 2</title>
+    <defs>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-1">
+            <stop stop-color="#FD7474" offset="0%"></stop>
+            <stop stop-color="#474747" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="50%" y1="0%" x2="50%" y2="100%" id="linearGradient-2">
+            <stop stop-color="#FD7474" offset="0%"></stop>
+            <stop stop-color="#474747" offset="100%"></stop>
+        </linearGradient>
+    </defs>
+    <g id="页面-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="编组-2">
+            <g id="编组" transform="translate(35.3159, 159)" stroke-width="7">
+                <path d="M0,27.564317 L0,160.366675 L408.141713,160.366675 L408.141713,32.4203371 L358.135251,32.4203371 C317.706302,69.071985 282.298868,94.7857917 251.91295,109.561757 C221.527031,124.337723 169.115039,141.272696 94.6769751,160.366675" id="路径" stroke="url(#linearGradient-1)"></path>
+                <path d="M9.09494702e-13,32.4203371 L9.09494702e-13,0 L49.3912989,0 C86.4246738,47.2724897 132.02227,83.1276952 186.184087,107.565617 C240.345904,132.003538 313.221976,149.603891 404.812301,160.366675" id="路径-2" stroke="url(#linearGradient-2)"></path>
+            </g>
+            <circle id="椭圆形" cx="239.5" cy="239.5" r="239.5"></circle>
+        </g>
+    </g>
+</svg>

@@ -1,0 +1,39 @@
+{
+  "name": "aibridge",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI models ecosystem connection infrastructure through standardized MCP marketplace",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "start": "turbo run start",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "ai",
+    "mcp",
+    "marketplace",
+    "agents",
+    "model",
+    "context",
+    "protocol"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "packageManager": "pnpm@8.6.0",
+  "devDependencies": {
+    "eslint": "^8.42.0",
+    "eslint-config-prettier": "^8.8.0",
+    "eslint-plugin-import": "^2.27.5",
+    "prettier": "^2.8.8",
+    "turbo": "^1.10.0",
+    "typescript": "^5.1.3"
+  },
+  "dependencies": {
+    "sharp": "^0.33.5"
+  }
+}
