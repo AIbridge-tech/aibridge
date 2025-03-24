@@ -3,6 +3,31 @@ import { useRouter } from 'next/router';
 import Link from 'next/link';
 import MainLayout from '../../components/layout/MainLayout';
 import { useAuth } from '../../contexts/AuthContext';
+import { ApiResponse } from '../../types';
+
+// Define types for wallet data
+interface Transaction {
+  id: string;
+  type: string;
+  amount: number;
+  timestamp: string;
+  status: string;
+  source?: string;
+  metadata?: {
+    destinationAddress?: string;
+    network?: string;
+    chainTxId?: string;
+  };
+}
+
+interface WalletData {
+  connected: boolean;
+  address: string;
+  balance: number;
+  isOnChainBalanceAvailable?: boolean;
+  chainBalance?: number;
+  transactions: Transaction[];
+}
 
 export default function WalletPage() {
   const { user, isAuthenticated, isLoading } = useAuth();
@@ -11,8 +36,8 @@ export default function WalletPage() {
   const [pageLoading, setPageLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Mock wallet data
-  const [wallet, setWallet] = React.useState({
+  // Wallet state
+  const [wallet, setWallet] = React.useState<WalletData>({
     connected: false,
     address: '',
     balance: 0,
@@ -26,42 +51,52 @@ export default function WalletPage() {
         try {
           setPageLoading(true);
           
-          // Mock data loading
-          setTimeout(() => {
-            setWallet({
-              connected: !!user.walletAddress,
-              address: user.walletAddress || '',
-              balance: 2513.75,
-              transactions: [
-                {
-                  id: '1',
-                  type: 'deposit',
-                  amount: 500,
-                  timestamp: new Date(Date.now() - 86400000).toISOString(),
-                  status: 'completed'
-                },
-                {
-                  id: '2',
-                  type: 'withdraw',
-                  amount: 200,
-                  timestamp: new Date(Date.now() - 172800000).toISOString(),
-                  status: 'completed'
-                },
-                {
-                  id: '3',
-                  type: 'earning',
-                  amount: 75.25,
-                  timestamp: new Date(Date.now() - 259200000).toISOString(),
-                  status: 'completed',
-                  source: 'MCP Downloads'
-                }
-              ]
-            });
-            setPageLoading(false);
-          }, 1000);
+          // Fetch wallet balance
+          const balanceResponse = await fetch('/api/wallet/balance');
+          if (!balanceResponse.ok) {
+            throw new Error('Failed to fetch wallet balance');
+          }
+          
+          const balanceData = await balanceResponse.json() as ApiResponse<{
+            balance: number;
+            walletAddress: string;
+            currency: string;
+            isOnChainBalanceAvailable?: boolean;
+            chainBalance?: number;
+          }>;
+          
+          // Fetch transaction history
+          const transactionsResponse = await fetch('/api/wallet/transactions');
+          if (!transactionsResponse.ok) {
+            throw new Error('Failed to fetch transaction history');
+          }
+          
+          const transactionsData = await transactionsResponse.json() as ApiResponse<{
+            transactions: Transaction[];
+          }>;
+          
+          setWallet({
+            connected: !!balanceData.data.walletAddress,
+            address: balanceData.data.walletAddress || '',
+            balance: balanceData.data.balance,
+            isOnChainBalanceAvailable: balanceData.data.isOnChainBalanceAvailable,
+            chainBalance: balanceData.data.chainBalance,
+            transactions: transactionsData.data.transactions || []
+          });
+          
+          setPageLoading(false);
         } catch (err) {
           console.error('Error fetching wallet data:', err);
           setError('Error fetching wallet data. Please try again later.');
+          
+          // Set default data in case of error
+          setWallet({
+            connected: !!user.walletAddress,
+            address: user.walletAddress || '',
+            balance: 0,
+            transactions: []
+          });
+          
           setPageLoading(false);
         }
       } else {
@@ -82,19 +117,68 @@ export default function WalletPage() {
   // Handle wallet connection
   const handleConnectWallet = async () => {
     try {
-      // In a real project, this would call a wallet connection API
-      // Simulate connection process
       setError(null);
       setPageLoading(true);
       
-      setTimeout(() => {
+      // Get phantom wallet if available
+      const walletProvider = (window as any).phantom?.solana;
+      
+      if (!walletProvider) {
+        setError('Phantom wallet not found. Please install Phantom wallet extension.');
+        setPageLoading(false);
+        return;
+      }
+      
+      try {
+        // Connect to wallet
+        const { publicKey } = await walletProvider.connect();
+        const walletAddress = publicKey.toString();
+        
+        // Sign message to verify wallet ownership
+        const message = `Connect wallet to AIbridge platform at ${new Date().toISOString()}`;
+        const encodedMessage = new TextEncoder().encode(message);
+        const signatureBytes = await walletProvider.signMessage(encodedMessage, 'utf8');
+        const signature = Array.from(new Uint8Array(signatureBytes))
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join('');
+        
+        // Send to API to connect wallet
+        const response = await fetch('/api/wallet/connect', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            walletAddress,
+            signature,
+            message
+          }),
+        });
+        
+        if (!response.ok) {
+          throw new Error('Failed to connect wallet');
+        }
+        
+        const data = await response.json();
+        
+        // Update wallet state
         setWallet({
           ...wallet,
           connected: true,
-          address: '0x' + Math.random().toString(16).slice(2, 12) + '...'
+          address: walletAddress
         });
-        setPageLoading(false);
-      }, 1500);
+        
+      } catch (err: any) {
+        console.error('Wallet connection error:', err);
+        if (err.code === 4001) {
+          // User rejected request
+          setError('Wallet connection was rejected by user.');
+        } else {
+          setError(`Error connecting wallet: ${err.message}`);
+        }
+      }
+      
+      setPageLoading(false);
     } catch (err) {
       console.error('Error connecting wallet:', err);
       setError('Error connecting wallet. Please try again later.');
@@ -124,34 +208,53 @@ export default function WalletPage() {
         return;
       }
       
-      // In a real project, this would call a withdrawal API
+      // Destination address
+      const destinationAddress = window.prompt("Enter destination wallet address:");
+      
+      if (!destinationAddress) {
+        return; // User cancelled
+      }
+      
       setPageLoading(true);
       setError(null);
       
-      // Simulate API call
-      setTimeout(() => {
-        // Update wallet balance
-        setWallet({
-          ...wallet,
-          balance: wallet.balance - parsedAmount,
-          transactions: [
-            {
-              id: Date.now().toString(),
-              type: 'withdraw',
-              amount: parsedAmount,
-              timestamp: new Date().toISOString(),
-              status: 'pending'
-            },
-            ...wallet.transactions
-          ]
-        });
-        
-        setPageLoading(false);
-        alert("Withdrawal request submitted successfully. Your transaction is now pending.");
-      }, 1500);
-    } catch (err) {
+      // Call withdrawal API
+      const response = await fetch('/api/wallet/withdraw', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: parsedAmount,
+          destinationAddress
+        }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to process withdrawal');
+      }
+      
+      const data = await response.json() as ApiResponse<{
+        transaction: Transaction;
+        newBalance: number;
+      }>;
+      
+      // Update wallet balance and add transaction
+      setWallet({
+        ...wallet,
+        balance: data.data.newBalance,
+        transactions: [
+          data.data.transaction,
+          ...wallet.transactions
+        ]
+      });
+      
+      setPageLoading(false);
+      alert("Withdrawal request submitted successfully.");
+    } catch (err: any) {
       console.error('Error processing withdrawal:', err);
-      setError('Error processing withdrawal. Please try again later.');
+      setError(`Error processing withdrawal: ${err.message}`);
       setPageLoading(false);
     }
   };

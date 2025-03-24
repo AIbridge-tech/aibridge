@@ -1,9 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
+import * as web3 from '@solana/web3.js';
 import User from '../models/user';
 import Transaction from '../models/transaction';
 import { AppError } from '../middleware/errorHandler';
 import logger from '../utils/logger';
+import { AIBTokenManager } from '../smart-contracts/aib-token';
+
+// Initialize token manager with devnet
+const tokenManager = new AIBTokenManager(web3.clusterApiUrl('devnet'));
 
 // Connect external wallet
 export const connectWallet = async (
@@ -77,15 +82,38 @@ export const getWalletBalance = async (
       throw new AppError('User has not connected a wallet yet', 400);
     }
     
-    // In a real application, this should query the latest balance on the blockchain
-    // Simplified here to return the balance stored in the database
+    // Get on-chain balance (if token contract is deployed)
+    let chainBalance = 0;
+    let isOnChainBalanceAvailable = false;
+    
+    try {
+      // Convert string wallet address to PublicKey
+      const walletPublicKey = new web3.PublicKey(user.walletAddress);
+      
+      if (tokenManager.getTokenMint()) {
+        // If token mint is initialized, get actual on-chain balance
+        chainBalance = await tokenManager.getTokenBalance(walletPublicKey);
+        isOnChainBalanceAvailable = true;
+        
+        // Update user's balance in database to reflect on-chain balance
+        if (user.aibBalance !== chainBalance) {
+          user.aibBalance = chainBalance;
+          await user.save();
+        }
+      }
+    } catch (error) {
+      logger.error(`Failed to get on-chain balance for user ${user.id}:`, error);
+      // Continue with database balance if on-chain query fails
+    }
     
     res.status(200).json({
       status: 'success',
       data: {
         balance: user.aibBalance,
         walletAddress: user.walletAddress,
-        currency: 'AIB'
+        currency: 'AIB',
+        isOnChainBalanceAvailable,
+        chainBalance: isOnChainBalanceAvailable ? chainBalance : undefined
       }
     });
   } catch (error) {
@@ -179,8 +207,24 @@ export const withdrawTokens = async (
       throw new AppError('Insufficient balance', 400);
     }
     
-    // In a real application, this should call a smart contract for on-chain transfer
-    // Simplified here to update the balance in the database
+    // Check if token mint is initialized
+    if (tokenManager.getTokenMint()) {
+      try {
+        // Try to execute on-chain transfer
+        const sourcePublicKey = new web3.PublicKey(user.walletAddress);
+        const destinationPublicKey = new web3.PublicKey(destinationAddress);
+        
+        // This is a simplified example - in production, you'd need to handle private keys securely
+        // and this would likely be initiated client-side with wallet signing
+        logger.info(`Attempting on-chain transfer of ${amount} AIB from ${sourcePublicKey.toString()} to ${destinationPublicKey.toString()}`);
+        
+        // For now, just log that we would do this in production
+        logger.info('On-chain transfer would be executed here in production');
+      } catch (error) {
+        logger.error('Failed to execute on-chain transfer:', error);
+        throw new AppError('Failed to execute withdrawal transaction', 500);
+      }
+    }
     
     // Deduct user balance
     user.aibBalance -= amount;
@@ -199,7 +243,8 @@ export const withdrawTokens = async (
       completedAt: new Date(),
       metadata: {
         destinationAddress,
-        network: destinationAddress.startsWith('0x') ? 'ethereum' : 'solana'
+        network: destinationAddress.startsWith('0x') ? 'ethereum' : 'solana',
+        chainTxId: 'pending-implementation' // In production, would store actual blockchain transaction ID
       }
     });
     
@@ -210,7 +255,8 @@ export const withdrawTokens = async (
     res.status(200).json({
       status: 'success',
       data: {
-        transaction
+        transaction,
+        newBalance: user.aibBalance
       }
     });
   } catch (error) {

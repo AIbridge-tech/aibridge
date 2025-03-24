@@ -283,9 +283,9 @@ export class AIBTokenManager {
   }
 
   /**
-   * Get token balance
-   * @param owner Token owner public key
-   * @returns Token balance (in token units, including decimals)
+   * Get token balance for a wallet
+   * @param owner Owner public key
+   * @returns Token balance (in token units, not raw units)
    */
   public async getTokenBalance(owner: web3.PublicKey): Promise<number> {
     try {
@@ -294,20 +294,59 @@ export class AIBTokenManager {
       }
 
       // Get owner token account
-      const tokenAccount = await splToken.getOrCreateAssociatedTokenAccount(
-        this.connection,
-        this.payer,
+      const tokenAccount = await splToken.getAssociatedTokenAddress(
         this.tokenMint,
         owner
       );
 
-      // Get token balance
-      const balance = await this.connection.getTokenAccountBalance(tokenAccount.address);
-      
-      logger.info(`Token balance for ${owner.toString()}: ${balance.value.uiAmount}`);
-      return balance.value.uiAmount || 0;
+      try {
+        // Get account info
+        const accountInfo = await splToken.getAccount(this.connection, tokenAccount);
+        
+        // Return balance converted from raw units to token units
+        return Number(accountInfo.amount) / (10 ** TOKEN_DECIMALS);
+      } catch (error) {
+        // Account may not exist yet, return 0 balance
+        if (error instanceof splToken.TokenAccountNotFoundError) {
+          return 0;
+        }
+        throw error;
+      }
     } catch (error) {
-      logger.error('Failed to get token balance:', error);
+      logger.error(`Failed to get token balance for ${owner.toString()}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if token account exists
+   * @param owner Owner public key
+   * @returns Boolean indicating if token account exists
+   */
+  public async tokenAccountExists(owner: web3.PublicKey): Promise<boolean> {
+    try {
+      if (!this.tokenMint) {
+        throw new Error('Token mint not initialized');
+      }
+
+      // Get associated token address
+      const tokenAccount = await splToken.getAssociatedTokenAddress(
+        this.tokenMint,
+        owner
+      );
+
+      // Try to get account info
+      try {
+        await splToken.getAccount(this.connection, tokenAccount);
+        return true;
+      } catch (error) {
+        if (error instanceof splToken.TokenAccountNotFoundError) {
+          return false;
+        }
+        throw error;
+      }
+    } catch (error) {
+      logger.error(`Failed to check token account for ${owner.toString()}:`, error);
       throw error;
     }
   }
